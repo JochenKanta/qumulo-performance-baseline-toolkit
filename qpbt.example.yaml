@@ -1,0 +1,34 @@
+schema_version: "0.1"
+profile: installation-v0.1
+cluster:
+  api_url: "https://qumulo.example.internal:8000"
+  api_token_env: "QPBT_TOKEN"
+  ca_certificate: "/etc/qpbt/qumulo-ca.pem"  # Use null for a publicly trusted CA.
+targets:
+  nfs:
+    mountpoint: "/mnt/qpbt-nfs"
+    expected_version: "4.1"  # '3' or '4.1'
+    expected_source: null     # e.g. 10.20.30.40:/qpbt
+  smb:
+    mountpoint: "/mnt/qpbt-smb"
+    expected_dialect: "3.1.1" # For reporting + verification
+    expected_source: null     # e.g. //10.20.30.40/qpbt
+workload:
+  warmup_seconds: 10
+  measure_seconds: 30
+  worker_count: 16
+  dataset_mib_per_worker: 1024
+  sequential_block_size: "1m"
+  random_block_size: "4k"
+  io_mode: direct
+  metadata_file_count: 1000
+telemetry:
+  enabled: true
+  required: true
+  sample_interval_seconds: 5
+report:
+  output_directory: "./reports"
+  formats: ["json", "html", "pdf"]
+safety:
+  cleanup: after_report # or never; only successful runs are cleaned
+  free_space_multiplier: 1.25

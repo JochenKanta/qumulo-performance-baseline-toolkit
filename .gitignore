@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+dist/
+build/
+.DS_Store
+.idea/
+.vscode/
+
+# QPBT run output can contain host names and infrastructure data.
+reports/
+results/
+*.fio.json
+*.log
+
+# Local, site-specific configuration and secrets. Keep supplied examples tracked.
+qpbt.yaml
+*.local.yaml
+*.local.yml
+.env
+.env.*
+!.env.example
+
+# Credentials and TLS material must never be committed.
+*.key
+*.pem
+*.p12
+*.pfx
+credentials*
