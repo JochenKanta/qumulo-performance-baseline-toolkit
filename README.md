@@ -14,8 +14,6 @@ QPBT führt eine versionierte Installation-Baseline (NFS + SMB) über **externe 
 - Neue Befehle `qpbt doctor` (schreibfreie Hostprüfung ohne Cluster) und `qpbt validate-run` (Offline-Qualitätsprüfung vollständiger Messläufe).
 - **29 Unit-/Mock-Tests erfolgreich.** Außerdem wurde die 4-KiB-O_DIRECT-Prüfroutine auf einem lokalen Linux-Dateisystem ausgeführt. **Kein Live-Qumulo-Test.**
 
-**WICHTIG:** Die Benchmark-Testmatrix heißt weiterhin `installation-v0.1` und wurde nicht verändert. Die Softwareversion ist 0.2, das Testprofil 0.1. Echte Läufe erfordern die eindeutige Angabe der `expected_source`-Werte; die Beispielkonfiguration lässt sie absichtlich offen. Der vollständige Ablauf und die Labor-Freigabekriterien stehen in [`docs/LAB_VALIDATION.md`](docs/LAB_VALIDATION.md).
-
 ## Lieferumfang
 
 - `doctor`: Lokale Linux-Voraussetzungen prüfen; keine Verbindung zum Cluster und keine Testdaten
