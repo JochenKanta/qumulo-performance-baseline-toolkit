@@ -1,4 +1,4 @@
-# QPBT v0.2 - Lab-Validierungsprotokoll
+# QPBT v0.3 - Lab-Validierungsprotokoll
 
 **Zweck:** Nachweis, dass der generierte NFS-/SMB-Benchmark auf echtem Qumulo mit korrekt gemessenen I/Os, sicheren Schreibgrenzen und vollständiger Telemetrie ausgeführt werden kann. **Noch keine Qumulo-Freigabe erteilt.**
 
@@ -121,6 +121,25 @@ qpbt validate-run reports/<RUN-ID>/result.json
 | Unerwartete Datei/Symlink im Run-Verzeichnis | Cleanup wird verweigert |
 | NFS+SMB mappen auf denselben Directory-Root | Protokollweise getrennte Run-Verzeichnisse, kein Kollisionsfehler |
 
+## Phase 6 - Netzwerk-Vorabtest und Mehrclient (v0.3)
+
+1. `qpbt netcheck` mit `cluster.node_addresses` aller Floating IPs, `expected_mtu` passend zum Kundennetz. Gegenprobe: MTU an einem Client bewusst auf 1500 → FAIL „Pfad-MTU“.
+2. `dataset_sizing: auto` mit Plattformwerten; `plan` und Report zeigen `OVER_CACHE`. Falsches `node_count` → Preflight blockiert.
+3. Mehrclient-Smoke mit 2 Clients über verschiedene Node-Adressen, dann mit ≥ 4 Clients:
+   - `qpbt preflight` zeigt beide Mounts je Client, Node-Verteilung ohne Warnung, NTP synchron.
+   - `qpbt run --confirm-write`: alle Tests mit `client_count` = Anzahl Clients, Jobdateien je Client im Report.
+   - Nach dem Lauf: keine fio-Server mehr auf den Clients (`ss -ltn | grep 8765`), keine Testdaten.
+4. Telemetrie: `node_balance` im result.json plausibel zur Client-Verteilung.
+
+| Negativtest Mehrclient | Erwartung |
+| --- | --- |
+| Client mountet anderen Export/Unterordner | Abbruch „sieht das Run-Verzeichnis nicht“, kein Datensatz |
+| SSH-Schlüssel fehlt | Preflight blockiert |
+| fio-Port belegt | Start verweigert |
+| Testbenutzer mit anderer UID | O_DIRECT-Probe schlägt fehl, kein Datensatz |
+| fio-Server während des Laufs beendet | Test FAIL „Ergebnis fehlt für Client“, Testdaten bleiben |
+| Alle Clients auf einer Node-Adresse | Warnung Node-Verteilung |
+
 ## Lab-Freigabedokumentation
 
 Für jeden geprüften Kombinationstyp das folgende Raster ausfüllen:
@@ -134,6 +153,9 @@ Für jeden geprüften Kombinationstyp das folgende Raster ausfüllen:
 | NFS-Version, rsize, wsize | ... |
 | SMB-Dialekt, Signing/Encryption, cache | ... |
 | QPBT-Versionsstand und Profil-Hash | ... |
+| Anzahl Clients / Node-Verteilung | ... |
+| Netzwerk-Vorabtest (Status, MTU, Linkraten) | ... |
+| Datensatz-Einordnung (OVER_CACHE?) | ... |
 | Smoke Run-ID | ... |
 | Baseline Run-ID | ... |
 | Negativtests | ... |

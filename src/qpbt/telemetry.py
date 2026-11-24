@@ -32,7 +32,8 @@ def parse_labels(text: str | None) -> dict:
     for m in LABEL.finditer(text):
         # Only allow known enum labels needed for summaries; never export freeform paths or users.
         if m.group(1) in {"protocol", "data_type", "io_type", "node_id", "interface", "role"}:
-            out[m.group(1)] = m.group(2)[:80]
+            # '|' and '=' are key separators internally.
+            out[m.group(1)] = m.group(2)[:80].replace("|", "_").replace("=", "_")
     return out
 
 
@@ -61,10 +62,50 @@ def parse_openmetrics(text: str) -> dict:
             continue
         labels = parse_labels(rawlabels)
         # Preserve protocol and io_type but avoid sample explosion: only ~10 metric families.
-        dimension = "|".join(f"{k}={labels[k]}" for k in ("protocol", "data_type", "io_type") if k in labels)
+        # Node-scoped families keep node_id (and interface/role for NICs) so that load
+        # distribution across nodes and the node count stay visible.
+        dimension = "|".join(f"{k}={labels[k]}" for k in dimension_labels(base) if k in labels)
         key = f"{name}|{dimension}" if dimension else name
         samples[key] = samples.get(key, 0.0) + value
     return {"cluster_info": info, "metrics": samples}
+
+
+NODE_FAMILIES = ("qumulo_disk_is_unhealthy", "qumulo_quorum_node_is_offline", "qumulo_time_is_not_synchronizing")
+
+
+def dimension_labels(base: str) -> tuple[str, ...]:
+    if base.startswith("qumulo_network_interface_"):
+        return ("node_id", "interface", "role")
+    if base in NODE_FAMILIES:
+        return ("node_id",)
+    return ("protocol", "data_type", "io_type")
+
+
+def split_key(key: str) -> tuple[str, dict]:
+    name, *parts = key.split("|")
+    return name, dict(p.split("=", 1) for p in parts if "=" in p)
+
+
+def node_ids(snapshot: dict) -> list[str]:
+    """Distinct nodes seen in the quorum gauge (one series per node)."""
+    ids = set()
+    for key in snapshot.get("metrics", {}):
+        name, labels = split_key(key)
+        if name == "qumulo_quorum_node_is_offline" and "node_id" in labels:
+            ids.add(labels["node_id"])
+    return sorted(ids, key=lambda x: (len(x), x))
+
+
+def node_link_speeds(snapshot: dict) -> dict:
+    """Sum of link speeds per node and role (bits/s), from the documented gauge."""
+    speeds: dict = {}
+    for key, value in snapshot.get("metrics", {}).items():
+        name, labels = split_key(key)
+        if name == "qumulo_network_interface_link_speed_bits_per_second" and "node_id" in labels:
+            role = labels.get("role", "unknown")
+            speeds.setdefault(labels["node_id"], {}).setdefault(role, 0.0)
+            speeds[labels["node_id"]][role] += value
+    return speeds
 
 
 def _timestamp():
@@ -165,14 +206,27 @@ def summarize_telemetry(data: dict) -> dict:
     duration = last["monotonic"] - first["monotonic"]
     if duration <= 0:
         return summary
+    nodes: dict = {}
     for key, start in first["metrics"].items():
-        name = key.split("|")[0]
+        name, labels = split_key(key)
         if name.endswith("_count") and key in last["metrics"]:
             delta = last["metrics"][key] - start
             if delta >= 0:
-                summary["counter_rates_per_second"][key] = round(delta / duration, 2)
+                rate = round(delta / duration, 2)
+                summary["counter_rates_per_second"][key] = rate
+                direction = {"qumulo_network_interface_received_bytes_count": "rx_bytes_per_second",
+                             "qumulo_network_interface_transmitted_bytes_count": "tx_bytes_per_second"}.get(name)
+                if direction and "node_id" in labels and labels.get("role") != "backend":
+                    entry = nodes.setdefault(labels["node_id"], {"rx_bytes_per_second": 0.0, "tx_bytes_per_second": 0.0})
+                    entry[direction] = round(entry[direction] + rate, 2)
             else:
                 summary["errors"].append(f"Counter-Reset erkannt: {key}")
+    if nodes:
+        summary["node_network"] = nodes
+        totals = [v["rx_bytes_per_second"] + v["tx_bytes_per_second"] for v in nodes.values()]
+        busiest = max(totals)
+        summary["node_balance"] = {"nodes": len(nodes),
+                                   "min_to_max_ratio": round(min(totals) / busiest, 3) if busiest > 0 else None}
     return summary
 
 

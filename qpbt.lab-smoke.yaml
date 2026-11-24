@@ -1,11 +1,14 @@
 # Funktionsprüfung - ausdrücklich KEIN performancevergleichbares Installationsprofil!
 # SOURCE, Cluster-URL, CA und Mountpoints vor einem Live-Test anpassen.
-schema_version: "0.1"
-profile: installation-v0.1
+schema_version: "0.2"
+profile: installation-v0.2
 cluster:
   api_url: "https://qumulo.example.internal:8000"
   api_token_env: "QPBT_TOKEN"
   ca_certificate: "/etc/qpbt/qumulo-ca.pem"
+  node_count: null
+  cache_gib_per_node: null
+  node_addresses: []
 targets:
   nfs:
     mountpoint: "/mnt/qpbt-nfs"
@@ -15,6 +18,10 @@ targets:
     mountpoint: "/mnt/qpbt-smb"
     expected_dialect: "3.1.1"
     expected_source: null # ERFORDERLICH für Live-Tests: exakter findmnt SOURCE-Wert
+network:
+  enabled: true
+  required: true
+  ping_count: 5
 workload:
   warmup_seconds: 0
   measure_seconds: 5

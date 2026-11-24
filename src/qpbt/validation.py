@@ -33,6 +33,30 @@ def validate_run(report: dict) -> dict:
             errors.append(f"Direct-I/O-Probe für {proto} fehlt oder ist fehlgeschlagen.")
     if not report.get("simulated") and not all(report.get("cluster_info", {}).get(k) for k in ("name", "uuid", "version")):
         errors.append("Clusteridentität unvollständig.")
+    clients = sorted((report.get("clients") or {}).keys())
+    if report.get("mode") == "multi_client" and not report.get("simulated"):
+        if not clients:
+            errors.append("Mehrclient-Lauf ohne Clientliste.")
+        for result in report.get("tests", []):
+            if result.get("test_id") == "T10" or result.get("status") != "PASS":
+                continue
+            expected = clients[:1] if result.get("workers") == 1 else clients
+            if sorted(result.get("participating_clients", [])) != sorted(expected) or \
+                    sorted((result.get("clients") or {}).keys()) != sorted(expected):
+                errors.append(f"{result.get('protocol')}/{result.get('test_id')}: Client-Ergebnisse unvollständig.")
+        for proto in ("nfs", "smb"):
+            probes = report.get("direct_io_probes", {}).get(proto, {}).get("clients", {})
+            missing = [c for c in clients if probes.get(c, {}).get("status") != "PASS"]
+            if missing:
+                errors.append(f"Direct-I/O-Probe {proto} fehlt für Clients: {missing}.")
+    if not report.get("simulated"):
+        net = (report.get("network") or {}).get("status")
+        if net in (None, "NOT_RUN", "DISABLED"):
+            warnings.append("Kein Netzwerk-Vorabtest im Lauf dokumentiert.")
+        elif net == "FAIL":
+            warnings.append("Netzwerk-Vorabtest mit FAIL-Befund: Ergebnisse netzwerkbegrenzt?")
+        if (report.get("sizing") or {}).get("classification") in ("FITS_IN_CACHE", "UNKNOWN", None):
+            warnings.append("Datensatz nicht als OVER_CACHE eingeordnet: Lesewerte können Cache-Werte sein.")
     if report.get("warnings"):
         warnings.extend(report["warnings"])
     return {"run_id": report.get("run_id"), "valid": not errors, "errors": errors,

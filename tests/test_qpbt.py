@@ -95,7 +95,7 @@ def test_metric_rate():
 
 def test_compare():
     def inp(number):
-        return {"run_id": "r", "profile": "installation-v0.1", "profile_hash": "abc",
+        return {"run_id": "r", "profile": "installation-v0.2", "profile_hash": "abc",
                 "fio_version": "fio-3.41", "client": {"c": 1}, "mounts": {},
                 "tests": [{"protocol": "nfs", "test_id": "T02", "status": "PASS",
                            "read": {"bytes_per_second": number, "iops": 3},
@@ -313,7 +313,7 @@ def test_profile_fingerprint_ignores_report_path_and_tokens(config):
 
 def test_compare_ignores_volatile_mount_ids():
     def run(mid, free):
-        return {"run_id": "r", "simulated": False, "profile": "installation-v0.1",
+        return {"run_id": "r", "simulated": False, "profile": "installation-v0.2",
                 "tool_version": "0.2", "fio_version": "fio-3.42", "profile_hash": "same",
                 "client": {}, "cluster_info": {"uuid": "uuid-a"},
                 "mounts": {"nfs": {"mountpoint": "/mnt/n", "fstype": "nfs4", "source": "s:/e",
@@ -325,7 +325,7 @@ def test_compare_ignores_volatile_mount_ids():
 
 
 def test_compare_warns_different_cluster_uuid():
-    a = {"cluster_info": {"uuid": "a"}, "profile": "installation-v0.1", "profile_hash": "X",
+    a = {"cluster_info": {"uuid": "a"}, "profile": "installation-v0.2", "profile_hash": "X",
          "fio_version": "fio-3.42", "tool_version": "0.2", "mounts": {}, "client": {}, "tests": []}
     b = copy.deepcopy(a)
     b["cluster_info"]["uuid"] = "b"
