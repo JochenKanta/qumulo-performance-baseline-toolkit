@@ -11,6 +11,14 @@ class Workload:
     workers: int
     rwmixread: int | None = None
 
+    @property
+    def single_stream(self) -> bool:
+        return self.workers == 1
+
+    @property
+    def sequential(self) -> bool:
+        return self.rw in ("read", "write")
+
 
 def workloads(conf: dict) -> list[Workload]:
     w = conf["workload"]
@@ -28,11 +36,22 @@ def workloads(conf: dict) -> list[Workload]:
     ]
 
 
+def client_count(conf: dict) -> int:
+    mc = conf.get("multi_client")
+    return len(mc["clients"]) if mc else 1
+
+
 def total_dataset_bytes(conf: dict) -> int:
+    """Dataset per protocol across all load clients."""
     w = conf["workload"]
-    return w["worker_count"] * w["dataset_mib_per_worker"] * 1024 * 1024
+    return client_count(conf) * w["worker_count"] * w["dataset_mib_per_worker"] * 1024 * 1024
 
 
 def estimated_seconds(conf: dict) -> int:
     work = conf["workload"]
     return 2 * 9 * (work["warmup_seconds"] + work["measure_seconds"])
+
+
+def estimated_prepare_seconds(conf: dict, assumed_mb_per_s: float = 1000.0) -> int:
+    """Rough planning aid only (assumed aggregate write rate, not a measurement)."""
+    return int(2 * total_dataset_bytes(conf) / (assumed_mb_per_s * 1e6))

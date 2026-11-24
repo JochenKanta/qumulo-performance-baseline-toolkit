@@ -1,9 +1,12 @@
-schema_version: "0.1"
-profile: installation-v0.1
+schema_version: "0.2"
+profile: installation-v0.2
 cluster:
   api_url: "https://qumulo.example.internal:8000"
   api_token_env: "QPBT_TOKEN"
   ca_certificate: "/etc/qpbt/qumulo-ca.pem"  # Use null for a publicly trusted CA.
+  node_count: null          # e.g. 4 - required for dataset_sizing: auto, checked against OpenMetrics
+  cache_gib_per_node: null  # hybrid: SSD cache per node; all-NVMe: RAM per node (see README)
+  node_addresses: []        # Qumulo floating/node IPs for the network pre-check; empty = mount addr=
 targets:
   nfs:
     mountpoint: "/mnt/qpbt-nfs"
@@ -13,10 +16,21 @@ targets:
     mountpoint: "/mnt/qpbt-smb"
     expected_dialect: "3.1.1" # For reporting + verification
     expected_source: null     # e.g. //10.20.30.40/qpbt
+network:
+  enabled: true
+  required: false            # true: FAIL findings (unreachable node, broken MTU path) block the run
+  expected_mtu: null         # e.g. 9000 to verify jumbo frames end-to-end
+  ping_count: 10
+  max_rtt_ms: 1.0
+  min_client_link_gbps: null # e.g. 25
+  iperf3_server: null        # optional iperf3 -s host on the test network (NOT a Qumulo node)
+  iperf3_seconds: 10
+  iperf3_streams: 4
 workload:
   warmup_seconds: 10
   measure_seconds: 30
   worker_count: 16
+  dataset_sizing: fixed      # fixed | auto (auto needs cluster.node_count + cache_gib_per_node)
   dataset_mib_per_worker: 1024
   sequential_block_size: "1m"
   random_block_size: "4k"

@@ -1,0 +1,79 @@
+# Mehrclient-Baseline: qpbt läuft auf dem Controller, fio-Server auf den Testclients.
+# Alle Werte sind Platzhalter. Vor dem Lauf: Mounts auf ALLEN Hosts einrichten,
+# expected_source exakt aus `findmnt -T <mountpoint> -o SOURCE` übernehmen.
+schema_version: "0.2"
+profile: installation-v0.2
+cluster:
+  api_url: "https://qumulo.example.internal:8000"
+  api_token_env: "QPBT_TOKEN"
+  ca_certificate: "/etc/qpbt/qumulo-ca.pem"
+  node_count: 4                 # wird gegen OpenMetrics geprüft
+  cache_gib_per_node: 64        # hybrid: SSD-Cache je Node; all-NVMe: RAM je Node
+  node_addresses: ["10.20.30.41", "10.20.30.42", "10.20.30.43", "10.20.30.44"]
+# Mounts des Controllers: Workspace, Datensatzprüfung, Metadaten-Test, Cleanup
+targets:
+  nfs:
+    mountpoint: "/mnt/qpbt-nfs"
+    expected_version: "4.1"     # gilt für alle Clients
+    expected_source: "10.20.30.41:/qpbt"
+  smb:
+    mountpoint: "/mnt/qpbt-smb"
+    expected_dialect: "3.1.1"   # gilt für alle Clients
+    expected_source: "//10.20.30.41/qpbt"
+network:
+  enabled: true
+  required: true                # unerreichbare Node oder kaputter MTU-Pfad blockiert den Lauf
+  expected_mtu: 9000
+  ping_count: 10
+  max_rtt_ms: 1.0
+  min_client_link_gbps: 25
+  iperf3_server: null           # optional: `iperf3 -s` auf einem Host im Testnetz (keine Qumulo-Node)
+multi_client:
+  fio_port: 8765
+  manage_fio_servers: true      # qpbt startet `fio --server` per SSH und beendet ihn danach
+  ssh_connect_timeout: 10
+  clients:                      # jeder Client idealerweise über eine andere Node-Adresse
+    - name: client01
+      address: "10.10.10.21"    # Testnetz-Adresse, an die der fio-Server bindet
+      ssh: "qpbt@10.10.10.21"   # Schlüssel-Login, gleiche UID wie der Controller-Benutzer
+      targets:
+        nfs: {mountpoint: "/mnt/qpbt-nfs", expected_source: "10.20.30.41:/qpbt"}
+        smb: {mountpoint: "/mnt/qpbt-smb", expected_source: "//10.20.30.41/qpbt"}
+    - name: client02
+      address: "10.10.10.22"
+      ssh: "qpbt@10.10.10.22"
+      targets:
+        nfs: {mountpoint: "/mnt/qpbt-nfs", expected_source: "10.20.30.42:/qpbt"}
+        smb: {mountpoint: "/mnt/qpbt-smb", expected_source: "//10.20.30.42/qpbt"}
+    - name: client03
+      address: "10.10.10.23"
+      ssh: "qpbt@10.10.10.23"
+      targets:
+        nfs: {mountpoint: "/mnt/qpbt-nfs", expected_source: "10.20.30.43:/qpbt"}
+        smb: {mountpoint: "/mnt/qpbt-smb", expected_source: "//10.20.30.43/qpbt"}
+    - name: client04
+      address: "10.10.10.24"
+      ssh: "qpbt@10.10.10.24"
+      targets:
+        nfs: {mountpoint: "/mnt/qpbt-nfs", expected_source: "10.20.30.44:/qpbt"}
+        smb: {mountpoint: "/mnt/qpbt-smb", expected_source: "//10.20.30.44/qpbt"}
+workload:
+  warmup_seconds: 10
+  measure_seconds: 30
+  worker_count: 16              # je Client
+  dataset_sizing: auto          # 2 x 4 x 64 GiB = 512 GiB je Protokoll -> 8 GiB je Worker
+  cache_multiplier: 2.0
+  sequential_block_size: "1m"
+  random_block_size: "4k"
+  io_mode: direct
+  metadata_file_count: 1000
+telemetry:
+  enabled: true
+  required: true
+  sample_interval_seconds: 5
+report:
+  output_directory: "./reports"
+  formats: ["json", "html", "pdf"]
+safety:
+  cleanup: after_report
+  free_space_multiplier: 1.25

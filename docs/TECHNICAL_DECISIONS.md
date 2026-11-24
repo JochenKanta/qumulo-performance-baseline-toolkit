@@ -1,4 +1,4 @@
-# QPBT v0.2 - Architekturentscheidungen und Grenzen
+# QPBT v0.3 - Architekturentscheidungen und Grenzen
 
 ## Funktionaler MVP
 
@@ -24,6 +24,7 @@
 
 1. Kein realer Test an einem Qumulo-Cluster in der aktuellen Entwicklungsumgebung. Mounts, Direct I/O und tatsächliche fio 3.x-CLI müssen im Labor validiert werden.
 2. Native Windows-SMB/SMB Multichannel Benchmarks fehlen.
+2a. Mehrclient-Start ist nicht taktgenau synchronisiert; der Versatz bei echten Clients ist noch nicht gemessen.
 3. Kein vollständiges Qumulo-Node-Inventar, kein SLA-/Referenzkatalog und keine automatische Netzwerk-Engpassdiagnose.
 4. Unterbrochene Runs werden teilweise gespeichert, ein granularer Resume ist noch nicht implementiert.
 5. Es gibt noch keinen bootbaren USB-Stick und keine vollständig gebündelten Offline-Wheels.
@@ -49,3 +50,25 @@ Ein `run` verlangt `--confirm-write`, bestätigte Netzwerk-Mounts und (standardm
 - PROTOCOL-Namespace für Run-Verzeichnis-ID, wenn NFS und SMB denselben Qumulo-Pfad zeigen.
 - Telemetrie-Tokens dürfen nicht per Proxy/Redirect an andere Hosts wandern.
 - Offline-Tool `validate-run` unterscheidet Vollständigkeit eines Reports von einer durch menschliche Laborprüfung bestätigten Freigabe.
+
+## Maßnahmen v0.3 (24.11.2026)
+
+### Netzwerk-Vorabtest
+
+- Nur clientseitige Standardwerkzeuge (ping, ip, /sys/class/net, optional iperf3). Auf Qumulo-Nodes läuft nichts; deshalb kein iperf3 Client→Node.
+- DF-Ping mit voller MTU ist der zuverlässigste Nachweis durchgängiger Jumbo Frames; ein reiner Interface-MTU-Vergleich übersieht Switch-Konfigurationen.
+- Netzwerk-Obergrenze = min(Summe Client-Links, Summe Qumulo-Front-End-Links); Backend-Interfaces (`role="backend"`) werden ausgeschlossen. Protokoll-Overhead ist nicht berücksichtigt.
+
+### Datensatzgröße
+
+- Die Cache-Größe ist plattformabhängig (Hybrid: SSD-Cache, All-NVMe: RAM) und wird nicht aus der API geraten, sondern vom SE angegeben. Die Node-Anzahl wird gegen `qumulo_quorum_node_is_offline` (eine Serie je Node) geprüft.
+- Single-Stream-Tests adressieren alle Datensatzdateien (`filename=a:b:...`, `file_service_type=random|sequential`), damit auch sie den Cache-Effekt nicht verstärken.
+
+### Mehrclient
+
+- fio Client/Server statt eigener Agenten: Auf Testclients wird nur fio benötigt; Jobdateien werden vom Controller übertragen und im Report archiviert.
+- SSH nur für read-only Prüfungen (findmnt, mountinfo, stat, test, cat Marker, fio --version, ping/ip) sowie Start/Stopp des fio-Servers. Befehle als argv mit `shlex.join`, `BatchMode=yes`, kein Agent-Forwarding.
+- Workspace, Datensatzprüfung, Metadaten-Test und Cleanup laufen ausschließlich über den Controller-Mount. Die Nonce im Marker beweist, dass jeder Client dasselbe Verzeichnis sieht.
+- fio-Verhalten (mit fio 3.36 verifiziert): Dateinamen-Präfix ohne `unique_filename=0`; verworfene Client-Jobs fehlen im JSON bei Exitcode 0; „All clients“ ohne Perzentile. Daraus folgen die Pflichtprüfung je Client und P95/P99 = schlechtester Client.
+- Der fio-Server ist nicht authentifiziert. Deshalb bindet qpbt ihn an die konfigurierte Testnetz-Adresse, startet ihn erst nach erfolgreichem Preflight und beendet ihn in jedem Fall.
+- Run-Verzeichnisse bleiben 0700: Testbenutzer muss auf allen Hosts dieselbe UID haben (NFS AUTH_SYS). Abweichungen fallen bei der O_DIRECT-Probe auf, vor dem Datensatz.
